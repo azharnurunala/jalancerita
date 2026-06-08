@@ -159,10 +159,7 @@ JC.project = (function () {
         <span class="lbl">${icon("sparkle")} Status</span>
       </div>
       <select class="inp inp-sm" data-status style="margin:4px 0 10px">
-        <option value="ide">Ide</option>
-        <option value="draft">Draf</option>
-        <option value="revisi">Revisi</option>
-        <option value="selesai">Selesai</option>
+        ${JC.STATUS.map(s => `<option value="${s.key}">${s.emoji} ${s.label}</option>`).join("")}
       </select>
       <div class="meta-row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="lbl">${icon("book")} Genre</span>
@@ -174,10 +171,13 @@ JC.project = (function () {
       const s = U.deadlineState(e.target.value);
       const pill = detail.querySelector("[data-dlpill]"); pill.className = `deadline-pill ${s.cls}`; pill.textContent = s.label;
     });
-    const sel = detail.querySelector("[data-status]"); sel.value = model.status || "draft";
+    const sel = detail.querySelector("[data-status]"); sel.value = JC.statusMeta(model.status).key;
     sel.addEventListener("change", e => commit({ status: e.target.value }));
     detail.querySelector("[data-genre]").addEventListener("input", e => commit({ genre: e.target.value }));
     rail.appendChild(detail);
+
+    // sales card
+    rail.appendChild(buildSalesCard());
 
     // delete
     const del = el(`<button class="btn btn-danger-ghost btn-block btn-sm">${icon("trash")} Hapus novel</button>`);
@@ -190,9 +190,47 @@ JC.project = (function () {
     return rail;
   }
 
+  /* ----------------------------------------- SALES --------- */
+  function buildSalesCard() {
+    if (!model.sales) model.sales = [];
+    const card = el(`<div class="rail-card sales-card">
+      <h4>${icon("tag")} Penjualan</h4>
+      <div class="sales-total"><span class="st-num" data-total>0</span><span class="st-lbl">eksemplar terjual</span></div>
+      <div class="sales-list" data-list></div>
+      <button class="add-inline sales-add" data-add>${icon("plus")} Tambah penjualan</button>
+    </div>`);
+    const list = card.querySelector("[data-list]");
+    const totalEl = card.querySelector("[data-total]");
+    const recalc = () => { totalEl.textContent = num(model.sales.reduce((s, r) => s + (Number(r.copies) || 0), 0)); };
+    const renderRows = () => {
+      clear(list);
+      if (!model.sales.length) list.appendChild(el(`<div class="sales-empty">Belum ada catatan penjualan.</div>`));
+      model.sales.forEach((r, i) => list.appendChild(salesRow(r, i, renderRows, recalc)));
+      recalc();
+    };
+    card.querySelector("[data-add]").onclick = () => {
+      model.sales.unshift({ id: U.uid(), date: new Date().toISOString().slice(0, 10), copies: 0 });
+      commit({ sales: model.sales }); renderRows();
+      const f = list.querySelector(".sales-copies"); if (f) f.focus();
+    };
+    renderRows();
+    return card;
+  }
+  function salesRow(r, i, rerender, recalc) {
+    const row = el(`<div class="sales-row">
+      <input class="inp inp-sm sales-date" type="date" value="${r.date || ""}">
+      <input class="inp inp-sm sales-copies" type="number" min="0" placeholder="0" value="${Number(r.copies) || 0}">
+      <button class="btn btn-icon btn-sm btn-soft sales-del" title="Hapus">${icon("trash")}</button>
+    </div>`);
+    row.querySelector(".sales-date").addEventListener("input", e => { r.date = e.target.value; commit({ sales: model.sales }); });
+    row.querySelector(".sales-copies").addEventListener("input", e => { r.copies = Math.max(0, parseInt(e.target.value) || 0); commit({ sales: model.sales }); recalc(); });
+    row.querySelector(".sales-del").onclick = () => { model.sales.splice(i, 1); commit({ sales: model.sales }); rerender(); };
+    return row;
+  }
+
   /* ----------------------------------------- MAIN ---------- */
   const TABS = [
-    { key: "ikhtisar", label: "Ikhtisar", ic: "pen" },
+    { key: "ikhtisar", label: "Preview", ic: "pen" },
     { key: "karakter", label: "Karakter", ic: "users", count: m => (m.characters || []).length },
     { key: "beat",     label: "Beat Sheet", ic: "layers", count: m => Object.values(m.beats || {}).filter(Boolean).length + "/15" },
     { key: "plot",     label: "Plot Points", ic: "clapper", count: m => (m.plotPoints || []).length },
@@ -258,6 +296,13 @@ JC.project = (function () {
     </div>`);
     syn.querySelector("textarea").addEventListener("input", e => commit({ synopsis: e.target.value }));
     c.appendChild(syn);
+
+    const blurb = el(`<div class="field">
+      <label>Blurb di Kover Belakang <span class="help">Teks penggoda singkat untuk sampul belakang.</span></label>
+      <textarea class="ta prose" data-blurb rows="4" placeholder="Kalimat-kalimat penggoda yang membuat orang ingin membaca…">${text(model.blurb)}</textarea>
+    </div>`);
+    blurb.querySelector("textarea").addEventListener("input", e => commit({ blurb: e.target.value }));
+    c.appendChild(blurb);
     return c;
   }
 
@@ -289,7 +334,8 @@ JC.project = (function () {
   function charCard(ch, i, content) {
     const card = el(`<div class="char-card">
       <div class="char-head">
-        <span class="char-ava">${U.initials(ch.name) === "?" ? icon("user", 'style="width:20px;height:20px"') : U.initials(ch.name)}</span>
+        <button class="char-ava" type="button" data-ava title="Tambah / ganti foto"></button>
+        <input type="file" accept="image/*" hidden data-avafile>
         <div class="ci">
           <input class="cname" placeholder="Nama karakter" value="${attr(ch.name)}">
           <input class="crole" placeholder="Peran — mis. Protagonis" value="${attr(ch.role)}">
@@ -299,8 +345,26 @@ JC.project = (function () {
       <div class="char-foot"><button class="btn btn-icon btn-sm btn-soft" data-del title="Hapus">${icon("trash")}</button></div>
     </div>`);
     const ava = card.querySelector(".char-ava");
+    const avaFile = card.querySelector("[data-avafile]");
+    const avaInner = () => {
+      const base = ch.photo
+        ? `<img src="${ch.photo}" alt="">`
+        : (U.initials(ch.name) === "?" ? icon("user", 'style="width:20px;height:20px"') : `<span class="ava-ini">${U.initials(ch.name)}</span>`);
+      return base + `<span class="ava-edit">${icon("camera")}</span>`;
+    };
+    ava.innerHTML = avaInner();
+    ava.classList.toggle("has-photo", !!ch.photo);
+    ava.onclick = () => avaFile.click();
+    avaFile.onchange = () => {
+      const f = avaFile.files[0]; if (!f) return;
+      U.resizeImage(f, 360).then(d => {
+        ch.photo = d; commit({ characters: model.characters });
+        ava.innerHTML = avaInner(); ava.classList.add("has-photo");
+        U.toast("Foto karakter diperbarui");
+      }).catch(() => U.toast("Gagal memuat gambar", "err"));
+    };
     const nameI = card.querySelector(".cname");
-    nameI.addEventListener("input", e => { ch.name = e.target.value; commit({ characters: model.characters }); ava.innerHTML = U.initials(ch.name) === "?" ? icon("user", 'style="width:20px;height:20px"') : U.initials(ch.name); });
+    nameI.addEventListener("input", e => { ch.name = e.target.value; commit({ characters: model.characters }); if (!ch.photo) ava.innerHTML = avaInner(); });
     card.querySelector(".crole").addEventListener("input", e => { ch.role = e.target.value; commit({ characters: model.characters }); });
     const ff = card.querySelector(".char-fields");
     CHAR_FIELDS.forEach(f => {
@@ -330,7 +394,7 @@ JC.project = (function () {
       const beat = el(`<div class="beat ${filled ? "filled" : ""}">
         <div class="beat-num">${b.no}</div>
         <div class="beat-body">
-          <div class="beat-name">${b.id} <span class="pct">${b.name} · ${b.pos}</span></div>
+          <div class="beat-name">${b.name} <span class="pct">${b.id} · ${b.pos}</span></div>
           <div class="beat-desc">${b.desc}</div>
           <textarea rows="1" placeholder="Apa yang terjadi di sini…">${text(model.beats[b.key])}</textarea>
         </div>

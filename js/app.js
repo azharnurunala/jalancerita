@@ -60,23 +60,22 @@ window.JC = window.JC || {};
       <div class="landing-left">
         <div class="landing-brand"><span class="brand-mark">${icon("feather")}</span> Jalan Cerita</div>
         <div class="landing-hero">
-          <div class="eyebrow">Ruang kerja penulis novel</div>
-          <h1>Setiap novel punya <em>jalan ceritanya</em> sendiri.</h1>
-          <p>Satu tempat untuk premis, sinopsis, karakter, beat sheet, plot, target kata, dan deadline — tersinkron di laptop maupun ponsel.</p>
+          <h1>Dari ide pertama hingga <em>halaman terakhir</em>.</h1>
+          <p>Semua rancangan dan progres ceritamu, dalam satu ruang kerja.</p>
           <div class="landing-feats">
-            <span>${icon("layers")} 15 beat Save the Cat</span>
-            <span>${icon("users")} Profil karakter</span>
-            <span>${icon("target")} Target & progres kata</span>
+            <span>${icon("pen")} Gambaran Cerita</span>
+            <span>${icon("users")} Profil Karakter</span>
             <span>${icon("note")} Catatan riset</span>
+            <span>${icon("target")} Target & Progres</span>
           </div>
           <div class="landing-cta">
             <button class="gbtn" data-signin>${icon("google")} Masuk dengan Google</button>
             <span class="hint">${JC.store.mode === "local"
               ? "Mode demo — datamu tersimpan di browser ini. Hubungkan Firebase untuk sinkron penuh."
-              : "Datamu aman & tersinkron lewat akun Google-mu."}</span>
+              : "Datamu aman & tersinkron lewat akun Google."}</span>
           </div>
         </div>
-        <div class="landing-foot">Save the Cat!® adalah metode struktur cerita oleh Blake Snyder.</div>
+        <div class="landing-foot"></div>
       </div>
       <div class="landing-right"><div class="landing-shelf"><div class="shelf-row">
         <div class="shelf-book b1"><h4>Senja di Batas Kota</h4><span>72.000 kata</span></div>
@@ -162,6 +161,7 @@ window.JC = window.JC || {};
     const percent = pct(p.currentWords, p.targetWords);
     const done = percent >= 100;
     const dl = deadlineState(p.deadline);
+    const sm = JC.statusMeta(p.status);
     const card = el(`<div class="novel-card">
       ${coverMarkup(p)}
       <div class="nc-body">
@@ -171,8 +171,8 @@ window.JC = window.JC || {};
           <div class="prog-row"><span class="pct">${percent}%</span><span class="words">${num(p.currentWords)} / ${num(p.targetWords)}</span></div>
         </div>
         <div class="nc-meta">
-          <span>${(p.characters || []).length} karakter</span><span class="dot"></span>
-          <span class="${dl.cls === "over" ? "" : ""}" style="${dl.cls === "over" ? "color:var(--danger)" : dl.cls === "warn" ? "color:var(--warn)" : ""}">${dl.label}</span>
+          <span class="nc-status">${sm.emoji} ${sm.label}</span><span class="dot"></span>
+          <span style="${dl.cls === "over" ? "color:var(--danger)" : dl.cls === "warn" ? "color:var(--warn)" : ""}">${dl.label}</span>
         </div>
       </div>
     </div>`);

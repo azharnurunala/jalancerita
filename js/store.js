@@ -29,9 +29,9 @@ JC.store = (function () {
     const now = new Date().toISOString();
     return {
       title: title || "Novel Tanpa Judul",
-      premise: "", synopsis: "", coverImage: null,
-      targetWords: 80000, currentWords: 0, deadline: "", status: "draft", genre: "",
-      characters: [], beats: {}, plotPoints: [], notes: [],
+      premise: "", synopsis: "", blurb: "", coverImage: null,
+      targetWords: 80000, currentWords: 0, deadline: "", status: "embrio", genre: "",
+      characters: [], beats: {}, plotPoints: [], notes: [], sales: [],
       createdAt: now, updatedAt: now,
     };
   }

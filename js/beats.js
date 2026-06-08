@@ -24,3 +24,20 @@ JC.ACTS = {
   2: "Babak Dua · Antitesis",
   3: "Babak Tiga · Sintesis",
 };
+
+/* Status pipeline — tahapan perjalanan naskah */
+JC.STATUS = [
+  { key: "embrio",     emoji: "🌱", label: "Embrio" },
+  { key: "draf0",      emoji: "📝", label: "Draf 0" },
+  { key: "draf1",      emoji: "📖", label: "Draf 1" },
+  { key: "revisi",     emoji: "🔨", label: "Revisi" },
+  { key: "draf_final", emoji: "✨", label: "Draf Final" },
+  { key: "siap_cetak", emoji: "✅", label: "Siap Cetak" },
+  { key: "terbit",     emoji: "📚", label: "Terbit" },
+];
+/* Petakan nilai lama → baru, dengan fallback ke Embrio */
+JC.statusMeta = function (key) {
+  const legacy = { ide: "embrio", draft: "draf0", draf: "draf0", selesai: "draf_final" };
+  const k = JC.STATUS.find(s => s.key === key) ? key : (legacy[key] || "embrio");
+  return JC.STATUS.find(s => s.key === k);
+};
