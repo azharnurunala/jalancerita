@@ -36,9 +36,6 @@ JC.share = (function () {
     const done = percent >= 100;
     const sm = JC.statusMeta(p.status);
     const ds = U.deadlineState(p.deadline);
-    const beatsFilled = Object.values(p.beats || {}).filter(b => b && String(b).trim()).length;
-    const chars = (p.characters || []).filter(c => (c.name || "").trim() || (c.role || "").trim());
-    const salesTotal = (p.sales || []).reduce((s, r) => s + (Number(r.copies) || 0), 0);
 
     const view = el(`<div class="share-view">
       <header class="share-top">
@@ -55,16 +52,15 @@ JC.share = (function () {
     const hero = el(`<section class="share-hero">
       <div class="share-cover">${JC.coverMarkup(p)}</div>
       <div class="share-head">
-        <div class="share-status"><span class="ss-badge ${done ? "done" : ""}">${sm.emoji} ${sm.label}</span>${p.genre ? `<span class="ss-genre">${esc(p.genre)}</span>` : ""}</div>
+        <div class="share-status"><span class="ss-badge ${done ? "done" : ""}">${sm.emoji} ${sm.label}</span></div>
         <h1>${esc(p.title)}</h1>
-        ${p.ownerName ? `<div class="share-by">oleh ${esc(p.ownerName)}</div>` : ""}
         ${p.premise ? `<p class="share-premise">${esc(p.premise)}</p>` : ""}
       </div>
     </section>`);
     wrap.appendChild(hero);
 
-    /* ---- stat strip ---- */
-    const stats = el(`<section class="share-stats">
+    /* ---- stat strip: hanya Progres & Deadline ---- */
+    const stats = el(`<section class="share-stats share-stats-2">
       <div class="sh-stat sh-prog">
         <div class="sh-k">Progres penulisan</div>
         <div class="sh-prog-row">
@@ -78,52 +74,15 @@ JC.share = (function () {
         <div class="sh-v">${p.deadline ? U.fmtDate(p.deadline) : "—"}</div>
         <div class="sh-sub ${ds.cls === "over" ? "over" : ds.cls === "warn" ? "warn" : ""}">${ds.label}</div>
       </div>
-      <div class="sh-stat">
-        <div class="sh-k">Beat sheet</div>
-        <div class="sh-v">${beatsFilled}<small>/15</small></div>
-        <div class="sh-sub">beat terisi</div>
-      </div>
-      ${salesTotal > 0 ? `<div class="sh-stat">
-        <div class="sh-k">Terjual</div>
-        <div class="sh-v">${num(salesTotal)}</div>
-        <div class="sh-sub">eksemplar</div>
-      </div>` : ""}
     </section>`);
     wrap.appendChild(stats);
 
-    /* ---- synopsis & blurb ---- */
-    if ((p.synopsis || "").trim()) {
-      wrap.appendChild(block("Sinopsis", `<p class="share-prose">${esc(p.synopsis)}</p>`));
-    }
+    /* ---- blurb ---- */
     if ((p.blurb || "").trim()) {
       wrap.appendChild(el(`<section class="share-block share-blurb">
         <h2>Blurb Kover Belakang</h2>
         <div class="blurb-card"><p class="share-prose">${esc(p.blurb)}</p></div>
       </section>`));
-    }
-
-    /* ---- beat sheet progress ---- */
-    wrap.appendChild(beatBlock(p));
-
-    /* ---- characters ---- */
-    if (chars.length) {
-      const grid = el(`<div class="share-char-grid"></div>`);
-      chars.forEach(c => {
-        const ava = c.photo
-          ? `<span class="sc-ava has-photo"><img src="${c.photo}" alt=""></span>`
-          : `<span class="sc-ava">${U.initials(c.name)}</span>`;
-        grid.appendChild(el(`<div class="share-char">
-          ${ava}
-          <div class="sc-info">
-            <div class="sc-name">${esc(c.name) || "Tanpa nama"}</div>
-            ${c.role ? `<div class="sc-role">${esc(c.role)}</div>` : ""}
-            ${c.description ? `<div class="sc-desc">${esc(c.description)}</div>` : ""}
-          </div>
-        </div>`));
-      });
-      const sec = block("Karakter", "");
-      sec.appendChild(grid);
-      wrap.appendChild(sec);
     }
 
     /* ---- footer ---- */

@@ -8,6 +8,7 @@ JC.project = (function () {
 
   let _unsub = null;
   let model = null, id = null, built = false;
+  let _pendingTab = null;
   let pending = {}, flush = null;
   let activeTab = "ikhtisar";
   let savedFlag = null;
@@ -31,6 +32,7 @@ JC.project = (function () {
   function doFlush() {
     if (!Object.keys(pending).length) { showSaved(); return; }
     const p = pending; pending = {};
+    if (JC.search) JC.search.invalidate();
     Promise.resolve(JC.store.update(id, p)).then(showSaved)
       .catch(() => { if (savedFlag) savedFlag.innerHTML = `Gagal menyimpan`; });
   }
@@ -40,7 +42,7 @@ JC.project = (function () {
      ======================================================================= */
   function render(rootEl, projectId, cached) {
     cleanup();
-    id = projectId; built = false; pending = {}; activeTab = "ikhtisar";
+    id = projectId; built = false; pending = {}; activeTab = _pendingTab || "ikhtisar"; _pendingTab = null;
     flush = U.debounce(doFlush, 650);
 
     clear(rootEl);
@@ -69,9 +71,11 @@ JC.project = (function () {
       <span class="topbar-spacer"></span>
       <span class="save-flag" data-saveflag></span>
       ${JC.store.mode === "local" ? `<span class="mode-badge">Mode Lokal</span>` : ""}
+      <button class="icon-btn topbar-search" data-search title="Cari (tekan /)">${icon("search")}<span>Cari</span></button>
       <button class="user-chip" data-home><span class="uname">${u ? u.name : ""}</span>${av}</button>
     </div></header>`);
     bar.querySelector("[data-home]").onclick = () => JC.go("/");
+    const sb = bar.querySelector("[data-search]"); if (sb) sb.onclick = () => JC.search.open();
     return bar;
   }
 
@@ -83,7 +87,7 @@ JC.project = (function () {
     savedFlag = document.querySelector("[data-saveflag]");
 
     wrap.appendChild((function () {
-      const b = el(`<a class="proj-back" href="#/">${icon("arrowLeft")} Semua novel</a>`);
+      const b = el(`<a class="proj-back" href="#/">${icon("arrowLeft")} Semua Novel</a>`);
       return b;
     })());
 
@@ -122,16 +126,16 @@ JC.project = (function () {
     const percent = pct(model.currentWords, model.targetWords);
     const done = percent >= 100;
     const prog = el(`<div class="rail-card bigprog">
-      <h4>Progres kata</h4>
+      <h4>Progres Kata</h4>
       <div class="pct-big ${done ? "done" : ""}" data-pctbig>${percent}<span style="font-size:18px">%</span></div>
       <div class="words-big" data-wordsbig>${num(model.currentWords)} dari ${num(model.targetWords)} kata</div>
       <div class="prog-track"><div class="prog-fill ${done ? "done" : ""}" data-fill style="width:${percent}%"></div></div>
       <div class="wordedit">
-        <label>Kata saat ini</label>
+        <label>Kata Saat Ini</label>
         <input class="inp inp-sm" type="number" min="0" data-cur value="${Number(model.currentWords) || 0}">
       </div>
       <div class="wordedit">
-        <label>Target kata</label>
+        <label>Target Kata</label>
         <input class="inp inp-sm" type="number" min="0" step="1000" data-tgt value="${Number(model.targetWords) || 0}">
       </div>
     </div>`);
@@ -158,13 +162,9 @@ JC.project = (function () {
       <div class="meta-row" style="border-top:1px solid var(--line);padding-top:12px">
         <span class="lbl">${icon("sparkle")} Status</span>
       </div>
-      <select class="inp inp-sm" data-status style="margin:4px 0 10px">
+      <select class="inp inp-sm" data-status style="margin-top:4px">
         ${JC.STATUS.map(s => `<option value="${s.key}">${s.emoji} ${s.label}</option>`).join("")}
       </select>
-      <div class="meta-row" style="border-top:1px solid var(--line);padding-top:12px">
-        <span class="lbl">${icon("book")} Genre</span>
-      </div>
-      <input class="inp inp-sm" type="text" data-genre placeholder="mis. Fiksi sejarah" value="${attr(model.genre)}" style="margin-top:4px">
     </div>`);
     detail.querySelector("[data-deadline]").addEventListener("input", e => {
       commit({ deadline: e.target.value });
@@ -173,8 +173,10 @@ JC.project = (function () {
     });
     const sel = detail.querySelector("[data-status]"); sel.value = JC.statusMeta(model.status).key;
     sel.addEventListener("change", e => commit({ status: e.target.value }));
-    detail.querySelector("[data-genre]").addEventListener("input", e => commit({ genre: e.target.value }));
     rail.appendChild(detail);
+
+    // manuscript (Google Docs) card
+    rail.appendChild(buildDocsCard());
 
     // sales card
     rail.appendChild(buildSalesCard());
@@ -183,14 +185,85 @@ JC.project = (function () {
     rail.appendChild(buildShareCard());
 
     // delete
-    const del = el(`<button class="btn btn-danger-ghost btn-block btn-sm">${icon("trash")} Hapus novel</button>`);
+    const del = el(`<button class="btn btn-danger-ghost btn-block btn-sm">${icon("trash")} Hapus Novel</button>`);
     del.onclick = () => {
-      U.confirmDialog("Hapus novel ini?", `“${model.title}” akan dihapus permanen beserta seluruh catatannya.`, "Hapus permanen")
+      U.confirmDialog("Hapus novel ini?", `“${model.title}” akan dihapus permanen beserta seluruh catatannya.`, "Hapus Permanen")
         .then(ok => { if (ok) { JC.store.remove(id).then(() => { U.toast("Novel dihapus"); JC.go("/"); }); } });
     };
     rail.appendChild(del);
 
     return rail;
+  }
+
+  /* ----------------------------------------- NASKAH (Google Docs) --------- */
+  function normalizeUrl(v) {
+    v = (v || "").trim();
+    if (!v) return "";
+    if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+    return v;
+  }
+  // Ubah URL Google Docs menjadi versi /preview yang bisa ditanam di iframe.
+  function docsPreviewUrl(v) {
+    v = normalizeUrl(v);
+    const m = v.match(/\/document\/d\/([^/]+)/);
+    if (m) return `https://docs.google.com/document/d/${m[1]}/preview`;
+    // Dokumen Google lain (sheet/slide) — coba ganti /edit → /preview
+    if (/docs\.google\.com|drive\.google\.com/.test(v)) return v.replace(/\/(edit|view)(\?.*)?$/, "/preview");
+    return v;
+  }
+  function openDocsModal() {
+    const editUrl = normalizeUrl(model.docsUrl);
+    const prevUrl = docsPreviewUrl(model.docsUrl);
+    const embeddable = /docs\.google\.com|drive\.google\.com/.test(prevUrl);
+    const back = el(`<div class="docs-modal-back">
+      <div class="docs-modal" role="dialog" aria-modal="true">
+        <div class="docs-modal-head">
+          <div class="dm-title">${icon("doc")} <span>Pratinjau Naskah</span></div>
+          <div class="dm-actions">
+            <a class="btn btn-accent btn-sm" data-cont href="${attr(editUrl)}" target="_blank" rel="noopener">${icon("external")} Lanjutkan Cerita</a>
+            <button class="btn btn-icon btn-sm btn-soft" data-close title="Tutup">${icon("x")}</button>
+          </div>
+        </div>
+        <div class="docs-modal-body">
+          ${embeddable
+            ? `<iframe class="docs-frame" src="${attr(prevUrl)}" referrerpolicy="no-referrer"></iframe>`
+            : `<div class="docs-noembed">
+                 <div class="ico">${icon("doc")}</div>
+                 <p>Tautan ini tidak bisa dipratinjau di sini.</p>
+                 <a class="btn btn-accent btn-sm" href="${attr(editUrl)}" target="_blank" rel="noopener">${icon("external")} Buka di Tab Baru</a>
+               </div>`}
+        </div>
+        <div class="docs-modal-foot">Pratinjau hanya-baca · klik <b>Lanjutkan Cerita</b> untuk menulis di tab penuh.</div>
+      </div>
+    </div>`);
+    const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+    const onKey = e => { if (e.key === "Escape") close(); };
+    back.addEventListener("click", e => { if (e.target === back) close(); });
+    back.querySelector("[data-close]").onclick = close;
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(back);
+  }
+  function buildDocsCard() {
+    const has = !!(model.docsUrl || "").trim();
+    const card = el(`<div class="rail-card docs-rail">
+      <h4>${icon("doc")} Naskah</h4>
+      <p class="docs-note">Tautkan dokumen Google Docs naskahmu agar bisa langsung dibuka dari sini.</p>
+      <button class="docs-open ${has ? "" : "is-empty"}" type="button" data-open>
+        ${icon("external")} <span>Buka Naskah</span>
+      </button>
+      <div class="docs-link-row">
+        <input class="inp inp-sm" data-docs type="url" inputmode="url" placeholder="Tempel tautan Google Docs…" value="${attr(model.docsUrl)}">
+      </div>
+    </div>`);
+    const input = card.querySelector("[data-docs]");
+    const openBtn = card.querySelector("[data-open]");
+    const sync = () => { openBtn.classList.toggle("is-empty", !input.value.trim()); };
+    input.addEventListener("input", e => { commit({ docsUrl: e.target.value.trim() }); sync(); });
+    openBtn.addEventListener("click", () => {
+      if (!input.value.trim()) { input.focus(); return; }
+      openDocsModal();
+    });
+    return card;
   }
 
   /* ----------------------------------------- SHARE --------- */
@@ -205,7 +278,7 @@ JC.project = (function () {
       <label class="share-toggle">
         <input type="checkbox" data-share ${model.shared ? "checked" : ""}>
         <span class="st-track"><span class="st-knob"></span></span>
-        <span class="st-txt">Halaman publik</span>
+        <span class="st-txt">Halaman Publik</span>
       </label>
       <div class="share-body" data-body style="${model.shared ? "" : "display:none"}">
         <p class="share-note">Siapa pun dengan tautan bisa melihat progres novel ini — <b>hanya-baca</b>. Cocok untuk editor &amp; tim promosi.</p>
@@ -213,7 +286,7 @@ JC.project = (function () {
           <input class="inp inp-sm" data-link readonly value="${attr(shareUrl())}">
           <button class="btn btn-icon btn-sm btn-soft" data-copy title="Salin tautan">${icon("copy")}</button>
         </div>
-        <a class="share-open" data-open href="${attr(shareUrl())}" target="_blank" rel="noopener">${icon("external")} Buka pratinjau publik</a>
+        <a class="share-open" data-open href="${attr(shareUrl())}" target="_blank" rel="noopener">${icon("external")} Buka Pratinjau Publik</a>
       </div>
     </div>`);
     const body = card.querySelector("[data-body]");
@@ -241,40 +314,32 @@ JC.project = (function () {
 
   /* ----------------------------------------- SALES --------- */
   function buildSalesCard() {
-    if (!model.sales) model.sales = [];
+    // migrasi dari format lama (daftar penjualan) → satu angka total
+    if (model.salesCopies == null && Array.isArray(model.sales) && model.sales.length) {
+      model.salesCopies = model.sales.reduce((s, r) => s + (Number(r.copies) || 0), 0);
+      model.salesUpdated = model.sales[0].date || new Date().toISOString().slice(0, 10);
+    }
+    const copies = Number(model.salesCopies) || 0;
     const card = el(`<div class="rail-card sales-card">
       <h4>${icon("tag")} Penjualan</h4>
-      <div class="sales-total"><span class="st-num" data-total>0</span><span class="st-lbl">eksemplar terjual</span></div>
-      <div class="sales-list" data-list></div>
-      <button class="add-inline sales-add" data-add>${icon("plus")} Tambah penjualan</button>
+      <div class="sales-total"><span class="st-num" data-total>${num(copies)}</span><span class="st-lbl">eksemplar terjual</span></div>
+      <div class="sales-edit">
+        <label>Perbarui jumlah terjual</label>
+        <input class="inp inp-sm" type="number" min="0" data-copies value="${copies}">
+      </div>
+      <div class="sales-updated" data-upd>${model.salesUpdated ? `Diperbarui ${U.fmtDate(model.salesUpdated)}` : "Belum pernah diperbarui"}</div>
     </div>`);
-    const list = card.querySelector("[data-list]");
     const totalEl = card.querySelector("[data-total]");
-    const recalc = () => { totalEl.textContent = num(model.sales.reduce((s, r) => s + (Number(r.copies) || 0), 0)); };
-    const renderRows = () => {
-      clear(list);
-      if (!model.sales.length) list.appendChild(el(`<div class="sales-empty">Belum ada catatan penjualan.</div>`));
-      model.sales.forEach((r, i) => list.appendChild(salesRow(r, i, renderRows, recalc)));
-      recalc();
-    };
-    card.querySelector("[data-add]").onclick = () => {
-      model.sales.unshift({ id: U.uid(), date: new Date().toISOString().slice(0, 10), copies: 0 });
-      commit({ sales: model.sales }); renderRows();
-      const f = list.querySelector(".sales-copies"); if (f) f.focus();
-    };
-    renderRows();
+    const updEl = card.querySelector("[data-upd]");
+    card.querySelector("[data-copies]").addEventListener("input", e => {
+      const v = Math.max(0, parseInt(e.target.value) || 0);
+      const today = new Date().toISOString().slice(0, 10);
+      model.salesCopies = v; model.salesUpdated = today;
+      commit({ salesCopies: v, salesUpdated: today });
+      totalEl.textContent = num(v);
+      updEl.textContent = `Diperbarui ${U.fmtDate(today)}`;
+    });
     return card;
-  }
-  function salesRow(r, i, rerender, recalc) {
-    const row = el(`<div class="sales-row">
-      <input class="inp inp-sm sales-date" type="date" value="${r.date || ""}">
-      <input class="inp inp-sm sales-copies" type="number" min="0" placeholder="0" value="${Number(r.copies) || 0}">
-      <button class="btn btn-icon btn-sm btn-soft sales-del" title="Hapus">${icon("trash")}</button>
-    </div>`);
-    row.querySelector(".sales-date").addEventListener("input", e => { r.date = e.target.value; commit({ sales: model.sales }); });
-    row.querySelector(".sales-copies").addEventListener("input", e => { r.copies = Math.max(0, parseInt(e.target.value) || 0); commit({ sales: model.sales }); recalc(); });
-    row.querySelector(".sales-del").onclick = () => { model.sales.splice(i, 1); commit({ sales: model.sales }); rerender(); };
-    return row;
   }
 
   /* ----------------------------------------- MAIN ---------- */
@@ -340,7 +405,7 @@ JC.project = (function () {
     c.appendChild(premise);
 
     const syn = el(`<div class="field">
-      <label>Sinopsis panjang <span class="help">Ringkasan alur dari awal sampai akhir.</span></label>
+      <label>Sinopsis Panjang <span class="help">Ringkasan alur dari awal sampai akhir.</span></label>
       <textarea class="ta lg prose" data-syn placeholder="Tuliskan jalan cerita lengkap di sini…">${text(model.synopsis)}</textarea>
     </div>`);
     syn.querySelector("textarea").addEventListener("input", e => commit({ synopsis: e.target.value }));
@@ -352,7 +417,56 @@ JC.project = (function () {
     </div>`);
     blurb.querySelector("textarea").addEventListener("input", e => commit({ blurb: e.target.value }));
     c.appendChild(blurb);
+
+    c.appendChild(buildSellingPoints(c));
     return c;
+  }
+
+  /* ---------- Selling Points ---------- */
+  const SP_COLORS = [
+    { c: "#2563EB", soft: "#E7EFFD" },  // biru
+    { c: "#E8722A", soft: "#FCEADC" },  // oranye
+    { c: "#1F8A5B", soft: "#DEF1E8" },  // hijau
+    { c: "#7C5CDB", soft: "#ECE6FB" },  // violet
+    { c: "#0E9AA8", soft: "#DAF1F3" },  // teal
+    { c: "#D2417E", soft: "#FBE3EE" },  // magenta
+  ];
+  function buildSellingPoints(tabRoot) {
+    if (!model.sellingPoints) model.sellingPoints = [];
+    const wrap = el(`<div class="field sp-field">
+      <label>${icon("star", 'style="width:14px;height:14px;vertical-align:-2px;color:var(--accent2)"')} Selling Points <span class="help">Poin-poin yang jadi nilai jual novel ini — untuk pitch ke penerbit & promosi.</span></label>
+      <div class="sp-grid" data-spgrid></div>
+    </div>`);
+    const grid = wrap.querySelector("[data-spgrid]");
+    const renderPoints = () => {
+      clear(grid);
+      model.sellingPoints.forEach((sp, i) => grid.appendChild(spCard(sp, i, renderPoints)));
+      const add = el(`<button class="sp-add" type="button">${icon("plus")} Tambah Selling Point</button>`);
+      add.onclick = () => {
+        model.sellingPoints.push({ id: U.uid(), text: "" });
+        commit({ sellingPoints: model.sellingPoints });
+        renderPoints();
+        const tas = grid.querySelectorAll(".sp-card textarea");
+        if (tas.length) tas[tas.length - 1].focus();
+      };
+      grid.appendChild(add);
+    };
+    renderPoints();
+    return wrap;
+  }
+  function spCard(sp, i, rerender) {
+    const col = SP_COLORS[i % SP_COLORS.length];
+    const card = el(`<div class="sp-card" style="--sp:${col.c};--sp-soft:${col.soft}">
+      <span class="sp-badge">${icon("star")}</span>
+      <textarea class="sp-text" rows="1" placeholder="mis. Mengangkat sejarah perkeretaapian yang belum pernah difiksikan…">${text(sp.text)}</textarea>
+      <button class="sp-del" type="button" title="Hapus">${icon("x")}</button>
+    </div>`);
+    const ta = card.querySelector("textarea"); U.autosize(ta);
+    ta.addEventListener("input", e => { sp.text = e.target.value; commit({ sellingPoints: model.sellingPoints }); });
+    card.querySelector(".sp-del").onclick = () => {
+      model.sellingPoints.splice(i, 1); commit({ sellingPoints: model.sellingPoints }); rerender();
+    };
+    return card;
   }
 
   /* ---------- Karakter ---------- */
@@ -369,7 +483,7 @@ JC.project = (function () {
 
     const grid = el(`<div class="char-grid"></div>`);
     model.characters.forEach((ch, i) => grid.appendChild(charCard(ch, i, content)));
-    const add = el(`<button class="add-tile">${icon("plus")} Tambah karakter</button>`);
+    const add = el(`<button class="add-tile">${icon("plus")} Tambah Karakter</button>`);
     add.onclick = () => {
       model.characters.push({ id: U.uid(), name: "", role: "", description: "", motivation: "", conflict: "", arc: "" });
       commit({ characters: model.characters }); renderTab(content); refreshTabCounts();
@@ -511,7 +625,7 @@ JC.project = (function () {
     if (!model.notes) model.notes = [];
     const grid = el(`<div class="notes-grid"></div>`);
     model.notes.forEach((n, i) => grid.appendChild(noteCard(n, i, content)));
-    const add = el(`<button class="add-tile" style="min-height:120px">${icon("plus")} Tambah catatan</button>`);
+    const add = el(`<button class="add-tile" style="min-height:120px">${icon("plus")} Tambah Catatan</button>`);
     add.onclick = () => {
       model.notes.unshift({ id: U.uid(), tag: "", title: "", body: "", createdAt: new Date().toISOString() });
       commit({ notes: model.notes }); renderTab(content); refreshTabCounts();
@@ -543,5 +657,5 @@ JC.project = (function () {
   function text(s) { return JC.escapeHtml(s == null ? "" : String(s)); }
   function rom(n) { return ["", "I", "II", "III"][n] || n; }
 
-  return { render, cleanup };
+  return { render, cleanup, gotoTab(t) { _pendingTab = t; } };
 })();

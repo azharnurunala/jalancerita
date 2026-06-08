@@ -15,6 +15,7 @@ window.JC = window.JC || {};
     const sh = hash.match(/^\/share\/([^/]+)\/(.+)$/);
     if (sh) { if (JC.project) JC.project.cleanup(); JC.share.render(root, decodeURIComponent(sh[1]), decodeURIComponent(sh[2])); return; }
     if (!JC.store.user()) { if (JC.project) JC.project.cleanup(); renderLanding(); return; }
+    if (hash === "/ideas") { if (JC.project) JC.project.cleanup(); JC.ideas.render(root); return; }
     const m = hash.match(/^\/novel\/(.+)$/);
     if (m) { JC.project.render(root, m[1], cachedProjects.find(p => p.id === m[1])); }
     else { if (JC.project) JC.project.cleanup(); renderDashboard(); }
@@ -33,16 +34,18 @@ window.JC = window.JC || {};
         <span class="brand-mark">${icon("feather")}</span>
         <span class="brand-name"><b>Jalan</b> Cerita</span>
       </a>
-      <span class="brand-sub">— pantau perjalanan novelmu</span>
       <span class="topbar-spacer"></span>
       ${JC.store.mode === "local" ? `<span class="mode-badge" title="Firebase belum dikonfigurasi — data tersimpan di browser ini saja">Mode Lokal</span>` : ""}
+      <button class="icon-btn topbar-search" data-search title="Cari (tekan /)">${icon("search")}<span>Cari</span></button>
       <button class="user-chip" data-menu>
         <span class="uname">${u ? u.name : ""}</span>${av}
       </button>
     </div></header>`);
     bar.querySelector("[data-menu]").onclick = userMenu;
+    const sb = bar.querySelector("[data-search]"); if (sb) sb.onclick = () => JC.search.open();
     return bar;
   }
+  JC.topbar = topbar;
 
   function userMenu() {
     JC.ui.modal({
@@ -105,6 +108,7 @@ window.JC = window.JC || {};
     if (unsubList) unsubList();
     unsubList = JC.store.observeProjects(projects => {
       cachedProjects = projects;
+      if (JC.search) JC.search.invalidate();
       paintDashboard(wrap, projects);
     });
   }
@@ -119,9 +123,13 @@ window.JC = window.JC || {};
         <h1>Halo, ${first} 👋</h1>
         <div class="sub">${projects.length ? `${projects.length} novel dalam perjalanan` : "Mulai perjalanan menulismu"}</div>
       </div>
-      <button class="btn btn-accent" data-new>${icon("plus")} Novel baru</button>
+      <div class="head-actions">
+        <button class="btn btn-idea" data-ideas>${icon("bulb")} Bank Ide</button>
+        <button class="btn btn-accent" data-new>${icon("plus")} Novel Baru</button>
+      </div>
     </div>`));
     wrap.querySelector("[data-new]").onclick = newNovel;
+    wrap.querySelector("[data-ideas]").onclick = () => go("/ideas");
 
     // stats
     if (projects.length) {
@@ -132,10 +140,10 @@ window.JC = window.JC || {};
       const nextDl = withDl[0];
       const publishedCount = projects.filter(p => JC.statusMeta(p.status).key === "terbit").length;
       wrap.appendChild(el(`<div class="stat-strip">
-        <div class="stat"><div class="k">Total novel</div><div class="v">${projects.length}</div></div>
-        <div class="stat"><div class="k">Sudah terbit</div><div class="v">${publishedCount}</div></div>
-        <div class="stat"><div class="k">Progres keseluruhan</div><div class="v">${pct(totalWords, totalTarget)}<small>%</small></div></div>
-        <div class="stat"><div class="k">Deadline terdekat</div><div class="v" style="font-size:18px">${nextDl ? fmtDate(nextDl.deadline) : "—"}</div></div>
+        <div class="stat"><div class="k">Total Novel</div><div class="v">${projects.length}</div></div>
+        <div class="stat"><div class="k">Sudah Terbit</div><div class="v">${publishedCount}</div></div>
+        <div class="stat"><div class="k">Total Kata Ditulis</div><div class="v">${num(totalWords)}</div></div>
+        <div class="stat"><div class="k">Deadline Terdekat</div><div class="v" style="font-size:18px">${nextDl ? fmtDate(nextDl.deadline) : "—"}</div></div>
       </div>`));
     }
 
@@ -145,7 +153,7 @@ window.JC = window.JC || {};
         <div class="ico">${icon("feather")}</div>
         <h3>Belum ada novel</h3>
         <p>Buat project pertamamu — beri judul, lalu lengkapi premis, karakter, dan beat sheet seiring jalan.</p>
-        <button class="btn btn-accent" data-new2>${icon("plus")} Buat novel pertama</button>
+        <button class="btn btn-accent" data-new2>${icon("plus")} Buat Novel Pertama</button>
       </div>`);
       empty.querySelector("[data-new2]").onclick = newNovel;
       wrap.appendChild(empty);
@@ -154,7 +162,7 @@ window.JC = window.JC || {};
 
     const grid = el(`<div class="grid"></div>`);
     projects.forEach(p => grid.appendChild(novelCard(p)));
-    const add = el(`<button class="add-card"><span class="plus">${icon("plus")}</span><span>Novel baru</span></button>`);
+    const add = el(`<button class="add-card"><span class="plus">${icon("plus")}</span><span>Novel Baru</span></button>`);
     add.onclick = newNovel;
     grid.appendChild(add);
     wrap.appendChild(grid);
@@ -177,10 +185,18 @@ window.JC = window.JC || {};
           <span class="nc-status">${sm.emoji} ${sm.label}</span><span class="dot"></span>
           <span style="${dl.cls === "over" ? "color:var(--danger)" : dl.cls === "warn" ? "color:var(--warn)" : ""}">${dl.label}</span>
         </div>
+        ${(p.docsUrl || "").trim() ? `<a class="nc-docs" data-docs href="${docHref(p.docsUrl)}" target="_blank" rel="noopener">${icon("doc")} Buka Naskah</a>` : ""}
       </div>
     </div>`);
+    const dlink = card.querySelector("[data-docs]");
+    if (dlink) dlink.addEventListener("click", e => e.stopPropagation());
     card.onclick = () => go(`/novel/${p.id}`);
     return card;
+  }
+  function docHref(v) {
+    v = (v || "").trim();
+    if (v && !/^https?:\/\//i.test(v)) v = "https://" + v;
+    return escapeHtml(v);
   }
 
   function coverMarkup(p) {
@@ -195,10 +211,10 @@ window.JC = window.JC || {};
 
   function newNovel() {
     JC.ui.modal({
-      title: "Novel baru",
+      title: "Novel Baru",
       body: "Beri judul untuk memulai. Semua detail lain bisa dilengkapi setelahnya.",
-      fields: [{ key: "title", label: "Judul novel", placeholder: "mis. Senja di Batas Kota" }],
-      confirmText: "Buat novel",
+      fields: [{ key: "title", label: "Judul Novel", placeholder: "mis. Senja di Batas Kota" }],
+      confirmText: "Buat Novel",
     }).then(v => {
       if (!v) return;
       const title = (v.title || "").trim() || "Novel Tanpa Judul";
@@ -211,6 +227,11 @@ window.JC = window.JC || {};
 
   /* -------------------------------------------------- boot ----------- */
   window.addEventListener("hashchange", route);
+  document.addEventListener("keydown", e => {
+    if (e.key === "/" && JC.store.user() && !/^(input|textarea|select)$/i.test((e.target.tagName || "")) && !e.target.isContentEditable) {
+      e.preventDefault(); JC.search.open();
+    }
+  });
 
   if (JC.store.mode === "firebase") {
     try { JC.store.init(); }

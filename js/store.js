@@ -32,7 +32,8 @@ JC.store = (function () {
       premise: "", synopsis: "", blurb: "", coverImage: null,
       targetWords: 80000, currentWords: 0, deadline: "", status: "embrio", genre: "",
       characters: [], beats: {}, plotPoints: [], notes: [], sales: [],
-      shared: false, ownerName: "",
+      sellingPoints: [],
+      shared: false, ownerName: "", docsUrl: "",
       createdAt: now, updatedAt: now,
     };
   }
@@ -96,6 +97,18 @@ JC.store = (function () {
         const obj = read(uid);
         return Promise.resolve(obj[pid] || null);
       },
+      getIdeas() {
+        try { return Promise.resolve(JSON.parse(localStorage.getItem(`jc:ideas:${_user.uid}`) || "[]")); }
+        catch { return Promise.resolve([]); }
+      },
+      saveIdeas(arr) {
+        localStorage.setItem(`jc:ideas:${_user.uid}`, JSON.stringify(arr || []));
+        return Promise.resolve();
+      },
+      getAllProjects() {
+        const obj = read(_user.uid);
+        return Promise.resolve(Object.values(obj).sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")));
+      },
     };
   })();
 
@@ -143,6 +156,18 @@ JC.store = (function () {
         return db.collection("users").doc(uid).collection("projects").doc(pid).get()
           .then(d => d.exists ? Object.assign({ id: d.id }, d.data()) : null);
       },
+      getIdeas() {
+        return db.collection("users").doc(_user.uid).collection("meta").doc("ideas").get()
+          .then(d => (d.exists && Array.isArray(d.data().notes)) ? d.data().notes : []);
+      },
+      saveIdeas(arr) {
+        return db.collection("users").doc(_user.uid).collection("meta").doc("ideas")
+          .set({ notes: arr || [], updatedAt: new Date().toISOString() });
+      },
+      getAllProjects() {
+        return col().orderBy("updatedAt", "desc").get()
+          .then(snap => { const arr = []; snap.forEach(d => arr.push(Object.assign({ id: d.id }, d.data()))); return arr; });
+      },
     };
   })();
 
@@ -161,6 +186,9 @@ JC.store = (function () {
     update: (id, patch) => impl.update(id, patch),
     remove: (id) => impl.remove(id),
     getPublic: (uid, id) => impl.getPublic(uid, id),
+    getIdeas: () => impl.getIdeas(),
+    saveIdeas: (arr) => impl.saveIdeas(arr),
+    getAllProjects: () => impl.getAllProjects(),
     blankProject,
   };
 })();

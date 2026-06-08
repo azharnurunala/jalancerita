@@ -33,6 +33,11 @@ JC.ui = (function () {
     copy:     '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     link:     '<path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     external: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    bulb:     '<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.85.96 1 1.6l.2 1.1a.9.9 0 0 0 .9.5h3a.9.9 0 0 0 .9-.5l.2-1.1c.15-.64.5-1.2 1-1.6A6 6 0 0 0 12 3z"/>',
+    x:        '<path d="M18 6 6 18M6 6l12 12"/>',
+    search:   '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    star:     '<path d="M12 3.5l2.6 5.27 5.82.85-4.21 4.1.99 5.79L12 16.77l-5.2 2.74.99-5.79-4.21-4.1 5.82-.85z"/>',
+    doc:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/>',
     cloud:    '<path d="M17.5 19a4.5 4.5 0 1 0-1.4-8.8A6 6 0 1 0 6 14"/><path d="M6 14h11.5"/>',
     refresh:  '<path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>',
   };
@@ -95,9 +100,9 @@ JC.ui = (function () {
 
   /* ---- cover color from title (stable) ---- */
   const COVER_PALETTES = [
-    ["#3f4d6b","#28324a"], ["#b14a2b","#8f3a20"], ["#3c5a4a","#26392f"],
-    ["#5a3a52","#3a2436"], ["#2f4858","#1d2f3a"], ["#7a5230","#56381f"],
-    ["#4a3f6b","#2e2747"], ["#6b3f3f","#472727"],
+    ["#2F6FE0","#1A3F90"], ["#E8722A","#B14A1B"], ["#2E5AB8","#16306E"],
+    ["#E68A3C","#C25E20"], ["#1F3A5F","#13243D"], ["#3E7CC4","#27538C"],
+    ["#D9602A","#A8421A"], ["#2C6E8F","#1A4459"],
   ];
   function coverColors(seed) {
     let h = 0; const s = seed || "x";
@@ -177,7 +182,8 @@ JC.ui = (function () {
   function autosize(ta) {
     const fit = () => { ta.style.height = "auto"; ta.style.height = (ta.scrollHeight + 2) + "px"; };
     ta.addEventListener("input", fit);
-    requestAnimationFrame(fit);
+    requestAnimationFrame(() => requestAnimationFrame(fit));
+    setTimeout(fit, 60);   // fallback bila rAF di-throttle (mis. iframe tak aktif)
     return fit;
   }
 
