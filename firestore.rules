@@ -6,5 +6,11 @@ service cloud.firestore {
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Akses publik HANYA-BACA untuk satu novel yang ditandai dibagikan.
+    // Tidak mengizinkan list/kueri — hanya ambil dokumen tunggal lewat tautan.
+    match /users/{userId}/projects/{projectId} {
+      allow get: if resource.data.shared == true;
+    }
   }
 }
