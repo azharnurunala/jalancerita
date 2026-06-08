@@ -12,6 +12,8 @@ window.JC = window.JC || {};
   /* -------------------------------------------------- routing -------- */
   function route() {
     const hash = location.hash.slice(1);
+    const sh = hash.match(/^\/share\/([^/]+)\/(.+)$/);
+    if (sh) { if (JC.project) JC.project.cleanup(); JC.share.render(root, decodeURIComponent(sh[1]), decodeURIComponent(sh[2])); return; }
     if (!JC.store.user()) { if (JC.project) JC.project.cleanup(); renderLanding(); return; }
     const m = hash.match(/^\/novel\/(.+)$/);
     if (m) { JC.project.render(root, m[1], cachedProjects.find(p => p.id === m[1])); }
@@ -128,9 +130,10 @@ window.JC = window.JC || {};
       const withDl = projects.filter(p => JC.ui.daysLeft(p.deadline) !== null && JC.ui.daysLeft(p.deadline) >= 0)
                              .sort((a, b) => JC.ui.daysLeft(a.deadline) - JC.ui.daysLeft(b.deadline));
       const nextDl = withDl[0];
+      const publishedCount = projects.filter(p => JC.statusMeta(p.status).key === "terbit").length;
       wrap.appendChild(el(`<div class="stat-strip">
         <div class="stat"><div class="k">Total novel</div><div class="v">${projects.length}</div></div>
-        <div class="stat"><div class="k">Total kata ditulis</div><div class="v">${num(totalWords)}</div></div>
+        <div class="stat"><div class="k">Sudah terbit</div><div class="v">${publishedCount}</div></div>
         <div class="stat"><div class="k">Progres keseluruhan</div><div class="v">${pct(totalWords, totalTarget)}<small>%</small></div></div>
         <div class="stat"><div class="k">Deadline terdekat</div><div class="v" style="font-size:18px">${nextDl ? fmtDate(nextDl.deadline) : "—"}</div></div>
       </div>`));
@@ -207,7 +210,6 @@ window.JC = window.JC || {};
   JC.escapeHtml = escapeHtml;
 
   /* -------------------------------------------------- boot ----------- */
-  JC.store.onAuth(() => { route(); });
   window.addEventListener("hashchange", route);
 
   if (JC.store.mode === "firebase") {
@@ -216,4 +218,6 @@ window.JC = window.JC || {};
   } else {
     JC.store.init();
   }
+
+  JC.store.onAuth(() => { route(); });
 })();

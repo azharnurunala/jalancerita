@@ -32,6 +32,7 @@ JC.store = (function () {
       premise: "", synopsis: "", blurb: "", coverImage: null,
       targetWords: 80000, currentWords: 0, deadline: "", status: "embrio", genre: "",
       characters: [], beats: {}, plotPoints: [], notes: [], sales: [],
+      shared: false, ownerName: "",
       createdAt: now, updatedAt: now,
     };
   }
@@ -91,6 +92,10 @@ JC.store = (function () {
         const obj = read(_user.uid); delete obj[id]; write(_user.uid, obj);
         return Promise.resolve();
       },
+      getPublic(uid, pid) {
+        const obj = read(uid);
+        return Promise.resolve(obj[pid] || null);
+      },
     };
   })();
 
@@ -134,6 +139,10 @@ JC.store = (function () {
         return col().doc(id).set(Object.assign({}, patch, { updatedAt: new Date().toISOString() }), { merge: true });
       },
       remove(id) { return col().doc(id).delete(); },
+      getPublic(uid, pid) {
+        return db.collection("users").doc(uid).collection("projects").doc(pid).get()
+          .then(d => d.exists ? Object.assign({ id: d.id }, d.data()) : null);
+      },
     };
   })();
 
@@ -151,6 +160,7 @@ JC.store = (function () {
     create: (data) => impl.create(data),
     update: (id, patch) => impl.update(id, patch),
     remove: (id) => impl.remove(id),
+    getPublic: (uid, id) => impl.getPublic(uid, id),
     blankProject,
   };
 })();

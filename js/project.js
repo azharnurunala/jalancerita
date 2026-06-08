@@ -179,6 +179,9 @@ JC.project = (function () {
     // sales card
     rail.appendChild(buildSalesCard());
 
+    // share card
+    rail.appendChild(buildShareCard());
+
     // delete
     const del = el(`<button class="btn btn-danger-ghost btn-block btn-sm">${icon("trash")} Hapus novel</button>`);
     del.onclick = () => {
@@ -188,6 +191,52 @@ JC.project = (function () {
     rail.appendChild(del);
 
     return rail;
+  }
+
+  /* ----------------------------------------- SHARE --------- */
+  function shareUrl() {
+    const u = JC.store.user();
+    const uid = u ? u.uid : "";
+    return `${location.origin}${location.pathname}#/share/${encodeURIComponent(uid)}/${encodeURIComponent(id)}`;
+  }
+  function buildShareCard() {
+    const card = el(`<div class="rail-card share-rail">
+      <h4>${icon("share")} Bagikan</h4>
+      <label class="share-toggle">
+        <input type="checkbox" data-share ${model.shared ? "checked" : ""}>
+        <span class="st-track"><span class="st-knob"></span></span>
+        <span class="st-txt">Halaman publik</span>
+      </label>
+      <div class="share-body" data-body style="${model.shared ? "" : "display:none"}">
+        <p class="share-note">Siapa pun dengan tautan bisa melihat progres novel ini — <b>hanya-baca</b>. Cocok untuk editor &amp; tim promosi.</p>
+        <div class="share-link-row">
+          <input class="inp inp-sm" data-link readonly value="${attr(shareUrl())}">
+          <button class="btn btn-icon btn-sm btn-soft" data-copy title="Salin tautan">${icon("copy")}</button>
+        </div>
+        <a class="share-open" data-open href="${attr(shareUrl())}" target="_blank" rel="noopener">${icon("external")} Buka pratinjau publik</a>
+      </div>
+    </div>`);
+    const body = card.querySelector("[data-body]");
+    const linkI = card.querySelector("[data-link]");
+    const openA = card.querySelector("[data-open]");
+    const sync = () => { const url = shareUrl(); linkI.value = url; openA.href = url; };
+    card.querySelector("[data-share]").addEventListener("change", e => {
+      const on = e.target.checked;
+      const patch = { shared: on };
+      if (on && !model.ownerName) patch.ownerName = (JC.store.user() && JC.store.user().name) || "";
+      commit(patch);
+      body.style.display = on ? "" : "none";
+      if (on) { sync(); U.toast("Halaman publik aktif"); } else { U.toast("Akses publik dimatikan"); }
+    });
+    card.querySelector("[data-copy]").onclick = () => {
+      sync();
+      const done = () => U.toast("Tautan disalin");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(linkI.value).then(done).catch(() => { linkI.select(); document.execCommand("copy"); done(); });
+      } else { linkI.select(); document.execCommand("copy"); done(); }
+    };
+    sync();
+    return card;
   }
 
   /* ----------------------------------------- SALES --------- */
